@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.shardingsphere.proxy.frontend.mysql.command.query.text.query;
+package org.apache.shardingsphere.proxy.frontend.mysql.command.query.text.fieldlist;
 
 import org.apache.shardingsphere.db.protocol.mysql.constant.MySQLCharacterSet;
 import org.apache.shardingsphere.db.protocol.mysql.constant.MySQLConstants;
 import org.apache.shardingsphere.db.protocol.mysql.packet.command.query.text.MySQLTextResultSetRowPacket;
-import org.apache.shardingsphere.db.protocol.mysql.packet.command.query.text.query.MySQLComQueryPacket;
+import org.apache.shardingsphere.db.protocol.mysql.packet.command.query.text.fieldlist.MySQLComFieldListPacket;
 import org.apache.shardingsphere.db.protocol.mysql.packet.generic.MySQLOKPacket;
 import org.apache.shardingsphere.db.protocol.packet.DatabasePacket;
 import org.apache.shardingsphere.infra.config.props.ConfigurationPropertyKey;
@@ -60,32 +60,25 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.plugins.MemberAccessor;
 import org.mockito.quality.Strictness;
 
-import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(AutoMockExtension.class)
 @StaticMockSettings(ProxyContext.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-class MySQLComQueryPacketExecutorTest {
+class MySQLComFieldListPacketExecutorTest {
     
     @Mock
     private ProxyBackendHandler proxyBackendHandler;
     
     @Mock
-    private MySQLComQueryPacket packet;
+    private MySQLComFieldListPacket packet;
     
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private ConnectionSession connectionSession;
@@ -97,43 +90,12 @@ class MySQLComQueryPacketExecutorTest {
     }
     
     @Test
-    void assertIsQueryResponse() throws SQLException, NoSuchFieldException, IllegalAccessException {
-        MySQLComQueryPacketExecutor mysqlComQueryPacketExecutor = new MySQLComQueryPacketExecutor(packet, connectionSession); MemberAccessor accessor = Plugins.getMemberAccessor();
-        accessor.set(MySQLComQueryPacketExecutor.class.getDeclaredField("proxyBackendHandler"), mysqlComQueryPacketExecutor, proxyBackendHandler);
-        QueryHeader queryHeader = mock(QueryHeader.class);
-        when(queryHeader.getColumnTypeName()).thenReturn("VARCHAR");
-        when(proxyBackendHandler.execute()).thenReturn(new QueryResponseHeader(Collections.singletonList(queryHeader)));
-        mysqlComQueryPacketExecutor.execute();
-        assertThat(mysqlComQueryPacketExecutor.getResponseType(), is(ResponseType.QUERY));
-    }
-    
-    @Test
-    void assertIsUpdateResponse() throws SQLException, NoSuchFieldException, IllegalAccessException {
-        MySQLComQueryPacketExecutor mysqlComQueryPacketExecutor = new MySQLComQueryPacketExecutor(packet, connectionSession);
-        MemberAccessor accessor = Plugins.getMemberAccessor();
-        accessor.set(MySQLComQueryPacketExecutor.class.getDeclaredField("proxyBackendHandler"), mysqlComQueryPacketExecutor, proxyBackendHandler);
-        when(proxyBackendHandler.execute()).thenReturn(new UpdateResponseHeader(mock(SQLStatement.class)));
-        mysqlComQueryPacketExecutor.execute();
-        assertThat(mysqlComQueryPacketExecutor.getResponseType(), is(ResponseType.UPDATE));
-    }
-
-    @Test
-    void assertExecuteMultiUpdateStatements() throws SQLException, NoSuchFieldException, IllegalAccessException {
-        when(connectionSession.getAttributeMap().hasAttr(MySQLConstants.MYSQL_OPTION_MULTI_STATEMENTS)).thenReturn(true);
-        when(connectionSession.getAttributeMap().attr(MySQLConstants.MYSQL_OPTION_MULTI_STATEMENTS).get()).thenReturn(0);
+    void assertComFieldListWithMySQLKeyword() {
+        MySQLComFieldListPacket packet = mock(MySQLComFieldListPacket.class);
         when(connectionSession.getDatabaseName()).thenReturn("foo_db");
-        when(packet.getSQL()).thenReturn("update t set v=v+1 where id=1;update t set v=v+1 where id=2;update t set v=v+1 where id=3");
-        ContextManager contextManager = mock(ContextManager.class);
-        MetaDataContexts metaDataContexts = mockMetaDataContexts();
-        when(contextManager.getMetaDataContexts()).thenReturn(metaDataContexts);
-        when(ProxyContext.getInstance().getContextManager()).thenReturn(contextManager);
-        MySQLComQueryPacketExecutor actual = new MySQLComQueryPacketExecutor(packet, connectionSession);
-        MemberAccessor accessor = Plugins.getMemberAccessor();
-        accessor.set(MySQLComQueryPacketExecutor.class.getDeclaredField("proxyBackendHandler"), actual, proxyBackendHandler);
-        when(proxyBackendHandler.execute()).thenReturn(new UpdateResponseHeader(mock(SQLStatement.class)));
-        Collection<DatabasePacket> actualPackets = actual.execute();
-        assertThat(actualPackets.size(), is(1));
-        assertThat(actualPackets.iterator().next(), instanceOf(MySQLOKPacket.class));
+        when(packet.getTable()).thenReturn("order");
+        MySQLComFieldListPacketExecutor executor = new MySQLComFieldListPacketExecutor(packet, connectionSession);
+        assertDoesNotThrow(() -> executor.execute());
     }
     
     private MetaDataContexts mockMetaDataContexts() {
@@ -146,10 +108,10 @@ class MySQLComQueryPacketExecutorTest {
         when(result.getMetaData().getGlobalRuleMetaData()).thenReturn(globalRuleMetaData);
         when(result.getMetaData().getProps().<Integer>getValue(ConfigurationPropertyKey.KERNEL_EXECUTOR_SIZE)).thenReturn(1);
         when(result.getMetaData().getProps().<Boolean>getValue(ConfigurationPropertyKey.SQL_SHOW)).thenReturn(false);
-        ShardingSphereTable table = new ShardingSphereTable("t", Arrays.asList(new ShardingSphereColumn("id", Types.BIGINT, true, false, false, false, true, false),
-                new ShardingSphereColumn("v", Types.INTEGER, false, false, false, false, true, false)), Collections.emptyList(), Collections.emptyList());
+        ShardingSphereTable order_table = new ShardingSphereTable("order", Arrays.asList(new ShardingSphereColumn("id", Types.BIGINT, true, false, false, false, true, false),
+                new ShardingSphereColumn("user_id", Types.INTEGER, false, false, false, false, true, false)), Collections.emptyList(), Collections.emptyList());
         ShardingSphereSchema schema = new ShardingSphereSchema();
-        schema.getTables().put("t", table);
+        schema.getTables().put("order", order_table);
         ShardingSphereDatabase database = new ShardingSphereDatabase("foo_db", TypedSPILoader.getService(DatabaseType.class, "MySQL"),
                 new ResourceMetaData(Collections.emptyMap()), new RuleMetaData(Collections.emptyList()), Collections.singletonMap("foo_db", schema));
         when(result.getMetaData().getDatabase("foo_db")).thenReturn(database);
@@ -158,27 +120,4 @@ class MySQLComQueryPacketExecutorTest {
         
     }
     
-    @Test
-    void assertNext() throws SQLException, NoSuchFieldException, IllegalAccessException {
-        MySQLComQueryPacketExecutor actual = new MySQLComQueryPacketExecutor(packet, connectionSession);
-        MemberAccessor accessor = Plugins.getMemberAccessor();
-        accessor.set(MySQLComQueryPacketExecutor.class.getDeclaredField("proxyBackendHandler"), actual, proxyBackendHandler);
-        when(proxyBackendHandler.next()).thenReturn(true, false);
-        assertTrue(actual.next());
-        assertFalse(actual.next());
-    }
-    
-    @Test
-    void assertGetQueryRowPacket() throws SQLException {
-        assertThat(new MySQLComQueryPacketExecutor(packet, connectionSession).getQueryRowPacket(), instanceOf(MySQLTextResultSetRowPacket.class));
-    }
-    
-    @Test
-    void assertClose() throws SQLException, NoSuchFieldException, IllegalAccessException {
-        MySQLComQueryPacketExecutor actual = new MySQLComQueryPacketExecutor(packet, connectionSession);
-        MemberAccessor accessor = Plugins.getMemberAccessor();
-        accessor.set(MySQLComQueryPacketExecutor.class.getDeclaredField("proxyBackendHandler"), actual, proxyBackendHandler);
-        actual.close();
-        verify(proxyBackendHandler).close();
-    }
 }
